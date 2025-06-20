@@ -4,6 +4,8 @@ from telebot import types
 import threading
 from flask_cors import CORS
 import os
+import requests
+from io import BytesIO
 
 # === Flask app ===
 app = Flask(__name__, static_folder='static')
