@@ -1,8 +1,11 @@
 from flask import Flask, request
 import requests
 from flask_cors import CORS
-import os
+from flask import send_from_directory
 
+@app.route('/')
+def serve_index():
+    return send_from_directory('static', 'index.html')
 app = Flask(__name__)
 CORS(app)
 
@@ -30,5 +33,6 @@ def home():
     return "👋 Сервер работает!"
 
 if __name__ == "__main__":
+    import os
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
