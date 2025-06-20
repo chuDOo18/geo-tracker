@@ -1,0 +1,11 @@
+services:
+  - type: web
+    name: geo-tracker
+    runtime: python
+    buildCommand: ""
+    startCommand: "python server.py"
+    envVars:
+      - key: BOT_TOKEN
+        value: "ТВОЙ_БОТ_ТОКЕН"
+      - key: CHAT_ID
+        value: "ТВОЙ_CHAT_ID"
