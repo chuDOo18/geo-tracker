@@ -1,22 +1,22 @@
-from flask import Flask, request
+from flask import Flask, request, send_from_directory
 import requests
 from flask_cors import CORS
-from flask import send_from_directory
 
-@app.route('/')
-def serve_index():
-    return send_from_directory('static', 'index.html')
-app = Flask(__name__)
+app = Flask(__name__, static_folder='static')
 CORS(app)
 
-BOT_TOKEN = '7673156387:AAF6Eop_JRvOY1dncc5ObC_CdBsAsQF2VJU'  # вставь сюда свой токен
-CHAT_ID = 651911888    # вставь сюда свой Telegram ID
+BOT_TOKEN = '7673156387:AAF6Eop_JRvOY1dncc5ObC_CdBsAsQF2VJU'  # твой токен
+CHAT_ID = 651911888  # твой Telegram ID
 
 def send_to_telegram(lat, lon):
     text = f"📍 Новая геолокация:\nШирота: {lat}\nДолгота: {lon}"
     url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
     data = {"chat_id": CHAT_ID, "text": text}
     requests.post(url, data=data)
+
+@app.route('/')
+def serve_index():
+    return send_from_directory(app.static_folder, 'index.html')
 
 @app.route("/send_location", methods=["POST"])
 def send_location():
@@ -27,10 +27,6 @@ def send_location():
         send_to_telegram(lat, lon)
         return {"status": "ok"}
     return {"status": "error"}, 400
-
-@app.route("/")
-def home():
-    return "👋 Сервер работает!"
 
 if __name__ == "__main__":
     import os
