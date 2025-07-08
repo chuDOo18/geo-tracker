@@ -30,7 +30,10 @@ def receive_location():
     lon = data.get('longitude')
     if lat and lon:
         try:
+            # Сообщение с координатами
             bot.send_message(CHAT_ID, f"📍 Новая геолокация:\nШирота: {lat}\nДолгота: {lon}")
+            # Карта с точкой
+            bot.send_location(CHAT_ID, latitude=lat, longitude=lon)
         except Exception as e:
             print(f"Ошибка при отправке в Telegram: {e}")
         return jsonify({"status": "ok"})
